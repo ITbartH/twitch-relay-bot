@@ -1,6 +1,7 @@
 import tmi from 'tmi.js';
 import dotenv from 'dotenv';
 import { TwitchOAuthHelper } from './oauth-helper.js';
+import { WordFilter } from './word-filter.js';
 
 // Załaduj zmienne środowiskowe
 dotenv.config();
@@ -31,6 +32,61 @@ class TwitchRelayBot {
     private lastMessages: Map<string, string> = new Map();
     private readonly MAX_STORED_USERS = 200;   // ⬅️ możesz zmienić
 
+    private wordFilter: WordFilter = new WordFilter();
+
+    private processMessageForRelay(message: string, context: 'ban' | 'normal' = 'normal'): {
+        shouldSend: boolean;
+        processedMessage: string;
+        wasFiltered: boolean;
+    } {
+        const analysis = this.wordFilter.analyzeText(message);
+
+        // Jeśli wiadomość zawiera szczególnie drastyczne słowa - zablokuj całkowicie
+        if (analysis.shouldBlock) {
+            console.log('🚫 Wiadomość zablokowana ze względu na drastyczną treść');
+            return {
+                shouldSend: false,
+                processedMessage: '',
+                wasFiltered: true
+            };
+        }
+
+        // Jeśli zawiera zakazane słowa - ocenzuruj
+        if (analysis.containsBanned) {
+            console.log(`⚠️ Ocenzurowano wiadomość. Znalezione słowa: ${analysis.foundWords.join(', ')}`);
+            return {
+                shouldSend: true,
+                processedMessage: analysis.censoredText,
+                wasFiltered: true
+            };
+        }
+
+        // Wiadomość czysta
+        return {
+            shouldSend: true,
+            processedMessage: message,
+            wasFiltered: false
+        };
+    }
+
+    private testWordFilter(): void {
+        const testMessages = [
+            "Pozdraiwam konfi",
+            "Test z wulgaryzmem kurwa",
+            "Test rasistowski murzyn",
+            "Test drastyczny hitler"
+        ];
+
+        console.log('🧪 Test filtra słów:');
+        testMessages.forEach(msg => {
+            const result = this.processMessageForRelay(msg);
+            console.log(`Original: "${msg}"`);
+            console.log(`Processed: "${result.processedMessage}"`);
+            console.log(`Should send: ${result.shouldSend}`);
+            console.log(`Was filtered: ${result.wasFiltered}`);
+            console.log('---');
+        });
+    }
 
     // Wzorce regex do wykrywania wiadomości o banach z 7tv
     private banPatterns = [
@@ -56,6 +112,7 @@ class TwitchRelayBot {
 
         this.client = this.createClient();
         this.setupEventHandlers();
+        this.testWordFilter();
     }
 
     private loadConfig(): BotConfig {
@@ -148,8 +205,18 @@ class TwitchRelayBot {
         this.client.on('ban', async (channel, username, reason, userstate) => {
             const cleanChannel = channel.replace(/^#/, '').replace(/^./, c => c.toUpperCase());
             const lastMsg = this.lastMessages.get(username.toLowerCase()) || 'brak danych';
-            const relay = `60 ${cleanChannel} zbanował @${username}. 60 `
-                + ` Ostatnie słowa: "${lastMsg}". JasperSalute`;
+            const processedMsg = this.processMessageForRelay(lastMsg, 'ban');
+
+            let relay: string;
+            if (!processedMsg.shouldSend) {
+                relay = `60 ${cleanChannel} zbanował @${username}. 60 `
+                    + ` Ostatnie słowa: [wiadomość usunięta - nieodpowiednia treść]. JasperSalute`;
+            } else {
+                const msgSuffix = processedMsg.wasFiltered ? ' [ocenzurowano]' : '';
+                relay = `60 ${cleanChannel} zbanował @${username}. 60 `
+                    + ` Ostatnie słowa: "${processedMsg.processedMessage}"${msgSuffix}. JasperSalute`;
+            }
+
             console.log('[BAN detected] ->', relay);
             await this.relayMessage(relay, '');
 
@@ -204,6 +271,7 @@ class TwitchRelayBot {
     }
 
     private async relayMessage(originalMessage: string, originalUser: string): Promise<void> {
+
         try {
             // Sprawdź rate limit
 

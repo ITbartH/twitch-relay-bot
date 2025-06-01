@@ -1,0 +1,153 @@
+export class WordFilter {
+    private bannedWords: string[] = [
+        // Rasistowskie/dyskryminacyjne
+        'murzyn', 'czarnuch', 'żółtek', 'żydek', 'żydek', 'żydas',
+        'pedał', 'ciapak', 'gej', 'homo', 'lesbijka',
+        
+        // Wulgaryzmy dotyczące grup
+        'kurwa', 'chuj', 'pizda', 'dupa', 'gówno',
+        'jebać', 'pierdolić', 'spierdalaj',
+        
+        // Terminy nazistowskie/skrajne
+        'hitler', 'nazi', 'heil', '1488', '88', '14/88',
+        
+        // Homofobiczne
+        'pedofil', 'zboczeniec', 'degenerat',
+        
+        // Antysemickie
+        'holocaust', 'holokaust', 'żydokomuna', 'żydzi',
+        
+        // Rasistowskie angielskie (często używane)
+        'nigger', 'nigga', 'faggot', 'retard', 'spic', 'chink'
+    ];
+
+    private replacementChar = '*';
+
+    /**
+     * Sprawdza czy tekst zawiera zakazane słowa
+     */
+    public containsBannedWords(text: string): boolean {
+        const normalizedText = this.normalizeText(text);
+        
+        return this.bannedWords.some(word => {
+            const normalizedWord = this.normalizeText(word);
+            return normalizedText.includes(normalizedWord);
+        });
+    }
+
+    /**
+     * Cenzuruje zakazane słowa w tekście
+     */
+    public censorText(text: string): string {
+        let censoredText = text;
+        const normalizedOriginal = this.normalizeText(text);
+        
+        for (const bannedWord of this.bannedWords) {
+            const normalizedBanned = this.normalizeText(bannedWord);
+            
+            // Znajdź wszystkie wystąpienia (case-insensitive)
+            const regex = new RegExp(this.escapeRegex(bannedWord), 'gi');
+            censoredText = censoredText.replace(regex, (match) => {
+                // Zastąp pierwszą i ostatnią literę, środek gwiazdkami
+                if (match.length <= 2) {
+                    return this.replacementChar.repeat(match.length);
+                }
+                return match[0] + this.replacementChar.repeat(match.length - 2) + match[match.length - 1];
+            });
+        }
+        
+        return censoredText;
+    }
+
+    /**
+     * Bardziej agresywne cenzurowanie - zastępuje całe słowo gwiazdkami
+     */
+    public heavyCensorText(text: string): string {
+        let censoredText = text;
+        
+        for (const bannedWord of this.bannedWords) {
+            const regex = new RegExp(`\\b${this.escapeRegex(bannedWord)}\\b`, 'gi');
+            censoredText = censoredText.replace(regex, this.replacementChar.repeat(bannedWord.length));
+        }
+        
+        return censoredText;
+    }
+
+    /**
+     * Sprawdza czy wiadomość powinna być całkowicie zablokowana
+     */
+    public shouldBlockMessage(text: string): boolean {
+        const normalizedText = this.normalizeText(text);
+        
+        // Lista szczególnie drastycznych słów które blokują całą wiadomość
+        const blockingWords = [
+            'hitler', 'nazi', 'heil', '1488', 'holocaust', 'holokaust',
+            'nigger', 'faggot'
+        ];
+        
+        return blockingWords.some(word => {
+            const normalizedWord = this.normalizeText(word);
+            return normalizedText.includes(normalizedWord);
+        });
+    }
+
+    /**
+     * Normalizuje tekst do porównań (usuwa znaki specjalne, diakrytyki)
+     */
+    private normalizeText(text: string): string {
+        return text
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // usuń diakrytyki
+            .replace(/[^a-z0-9]/g, ''); // zostaw tylko litery i cyfry
+    }
+
+    /**
+     * Escapuje znaki specjalne dla regex
+     */
+    private escapeRegex(text: string): string {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Dodaje nowe zakazane słowo
+     */
+    public addBannedWord(word: string): void {
+        if (!this.bannedWords.includes(word.toLowerCase())) {
+            this.bannedWords.push(word.toLowerCase());
+        }
+    }
+
+    /**
+     * Usuwa słowo z listy zakazanych
+     */
+    public removeBannedWord(word: string): void {
+        const index = this.bannedWords.indexOf(word.toLowerCase());
+        if (index > -1) {
+            this.bannedWords.splice(index, 1);
+        }
+    }
+
+    /**
+     * Zwraca statystyki tekstu
+     */
+    public analyzeText(text: string): {
+        originalText: string;
+        containsBanned: boolean;
+        shouldBlock: boolean;
+        censoredText: string;
+        foundWords: string[];
+    } {
+        const foundWords = this.bannedWords.filter(word => 
+            this.normalizeText(text).includes(this.normalizeText(word))
+        );
+
+        return {
+            originalText: text,
+            containsBanned: this.containsBannedWords(text),
+            shouldBlock: this.shouldBlockMessage(text),
+            censoredText: this.censorText(text),
+            foundWords
+        };
+    }
+}
