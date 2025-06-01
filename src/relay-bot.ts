@@ -167,6 +167,9 @@ class TwitchRelayBot {
             // 3a ► zapisz wiadomość
             if (sender) this.rememberMessage(sender, message);
 
+            // 3b ► log (pomaga w debugowaniu)
+            //console.log(`[${channelName}] ${sender}: ${message}`);
+
             // (Jeśli zostawiasz regex-based wykrywanie banów w zwykłych msg)
             if (this.isBanMessage(message)) {
                 console.log('🚨 Wykryto ban (regex w message)');
