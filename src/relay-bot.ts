@@ -207,26 +207,73 @@ class TwitchRelayBot {
                 await this.sleep(this.messageRateLimit - (currentTime - this.lastMessageTime));
             }
 
-            // Sformatuj wiadomość do przekazania
-            const relayMessage = ` ${originalUser}: ${originalMessage}`;
+            // Lepsze formatowanie wiadomości - usuń pusty originalUser
+            const relayMessage = originalUser ?
+                `${originalUser}: ${originalMessage}` :
+                originalMessage;
 
-            // Wyślij wiadomość na kanał docelowy
-            await this.client.say(this.config.targetChannel, relayMessage);
+            console.log(`🔍 Debug - próba wysłania na kanał: #${this.config.targetChannel}`);
+            console.log(`🔍 Debug - treść wiadomości: "${relayMessage}"`);
+            console.log(`🔍 Debug - status połączenia: ${this.client.readyState()}`);
+
+            // Sprawdź czy klient jest połączony
+            if (this.client.readyState() !== 'OPEN') {
+                console.error('❌ Klient nie jest połączony! Status:', this.client.readyState());
+                // Spróbuj ponownie połączyć
+                await this.client.connect();
+                return;
+            }
+
+            // Wyślij wiadomość na kanał docelowy z dodatkowym debugowaniem
+            const result = await this.client.say(`#${this.config.targetChannel}`, relayMessage);
+            console.log('🔍 Debug - rezultat say():', result);
 
             this.lastMessageTime = Date.now();
 
             console.log(`📤 Przekazano wiadomość:`);
-            console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser})`);
+            console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser || 'system'})`);
             console.log(`   📍 Do: #${this.config.targetChannel}`);
             console.log(`   💬 Treść: ${originalMessage}`);
+
+            // Dodatkowa weryfikacja - spróbuj wysłać testową wiadomość co jakiś czas
+            if (Math.random() < 0.1) { // 10% szans na test
+                setTimeout(async () => {
+                    try {
+                        await this.client.say(`#${this.config.targetChannel}`, "🔧 Test połączenia bota");
+                        console.log('✅ Test wiadomość wysłana pomyślnie');
+                    } catch (testError) {
+                        console.error('❌ Test wiadomość nie poszła:', testError);
+                    }
+                }, 2000);
+            }
 
         } catch (error) {
             console.error('❌ Błąd podczas przekazywania wiadomości:', error);
 
+            // Bardziej szczegółowe logowanie błędów
+            if (error instanceof Error) {
+                console.error('❌ Szczegóły błędu:', {
+                    message: error.message,
+                    stack: error.stack,
+                    name: error.name
+                });
+            }
+
             // Jeśli błąd związany z połączeniem, spróbuj ponownie po chwili
-            if (error instanceof Error && error.message.includes('Not connected')) {
-                console.log('🔄 Próba ponownego połączenia...');
-                setTimeout(() => this.relayMessage(originalMessage, originalUser), 3000);
+            if (error instanceof Error && (
+                error.message.includes('Not connected') ||
+                error.message.includes('Connection closed') ||
+                error.message.includes('ECONNRESET')
+            )) {
+                console.log('🔄 Próba ponownego połączenia i wysłania...');
+                setTimeout(async () => {
+                    try {
+                        await this.client.connect();
+                        await this.relayMessage(originalMessage, originalUser);
+                    } catch (retryError) {
+                        console.error('❌ Błąd przy ponownej próbie:', retryError);
+                    }
+                }, 3000);
             }
         }
     }
