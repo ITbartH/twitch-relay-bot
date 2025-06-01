@@ -141,10 +141,10 @@ class TwitchRelayBot {
         });
 
         this.client.on('ban', async (channel, username, reason, userstate) => {
+            const cleanChannel = channel.replace(/^#/, '').replace(/^./, c => c.toUpperCase());
             const lastMsg = this.lastMessages.get(username.toLowerCase()) || 'brak danych';
-            const relay = `${channel} właśnie zbanował ${username}. 60 `
-                + ` | Ostatnia wiadomość: "${lastMsg}". `
-                + ` | Powód: ${reason || 'brak'}.`;
+            const relay = `${cleanChannel} zbanował ${username}. 60 `
+                + ` | Ostatnia wiadomość: "${lastMsg}".`;
             console.log('[BAN detected] ->', relay);
             await this.relayMessage(relay, '');
 

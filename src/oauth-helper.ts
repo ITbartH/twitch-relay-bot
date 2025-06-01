@@ -186,7 +186,7 @@ export class TwitchOAuthHelper {
       
       const token = await this.exchangeCodeForToken(code);
       console.log('✅ Token OAuth został wygenerowany i zapisany');
-      
+      console.log('Twój OAUTH token: ' + token);
       return token;
     } catch (error) {
       throw new Error(`Błąd podczas OAuth flow: ${error}`);
