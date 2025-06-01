@@ -32,7 +32,7 @@ class TwitchRelayBot {
     private lastMessages: Map<string, string> = new Map();
     private readonly MAX_STORED_USERS = 200;   // ⬅️ możesz zmienić
 
-    private wordFilter: WordFilter = new WordFilter();
+    private wordFilter: WordFilter = new WordFilter(false);
 
     private processMessageForRelay(message: string, context: 'ban' | 'normal' = 'normal'): {
         shouldSend: boolean;

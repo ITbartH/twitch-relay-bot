@@ -1,4 +1,6 @@
 export class WordFilter {
+    private strictMode: boolean = false; // true = tylko całe słowa, false = wszędzie
+    
     private bannedWords: string[] = [
         // Rasistowskie/dyskryminacyjne
         'murzyn', 'czarnuch', 'żółtek', 'żydek', 'żydek', 'żydas',
@@ -23,16 +25,62 @@ export class WordFilter {
 
     private replacementChar = '*';
 
+    constructor(strictMode: boolean = false) {
+        this.strictMode = strictMode;
+    }
+
     /**
      * Sprawdza czy tekst zawiera zakazane słowa
      */
     public containsBannedWords(text: string): boolean {
+        return this.checkBannedWords(text, this.strictMode);
+    }
+
+    /**
+     * Sprawdza zakazane słowa z opcją strict mode
+     */
+    private checkBannedWords(text: string, strictMode: boolean): boolean {
         const normalizedText = this.normalizeText(text);
         
         return this.bannedWords.some(word => {
             const normalizedWord = this.normalizeText(word);
-            return normalizedText.includes(normalizedWord);
+            
+            if (strictMode) {
+                // Tylko całe słowa (z granicami słów)
+                const wordBoundaryRegex = new RegExp(`\\b${this.escapeRegex(normalizedWord)}\\b`);
+                return wordBoundaryRegex.test(normalizedText);
+            } else {
+                // Wszędzie (także wewnątrz słów) - ale z wyjątkami
+                if (this.isFalsePositive(text, word)) {
+                    return false;
+                }
+                return normalizedText.includes(normalizedWord);
+            }
         });
+    }
+
+    /**
+     * Sprawdza czy to fałszywy pozytyw
+     */
+    private isFalsePositive(text: string, bannedWord: string): boolean {
+        const normalizedText = this.normalizeText(text);
+        const normalizedBanned = this.normalizeText(bannedWord);
+        
+        // Lista wyjątków - słowa które zawierają zakazane słowa ale są OK
+        const exceptions: { [key: string]: string[] } = {
+            'gej': ['negacja', 'geografia', 'algebra', 'vegetation'],
+            'dupa': ['podstawa', 'fundament', 'duplikat'],
+            'kurwa': ['merkury', 'kurczak'], // rzadko ale może się zdarzyć
+            'nazi': ['gymnasium', 'organizacja'] // dla 'nazi' w środku
+        };
+        
+        if (exceptions[normalizedBanned]) {
+            return exceptions[normalizedBanned].some(exception => 
+                normalizedText.includes(this.normalizeText(exception))
+            );
+        }
+        
+        return false;
     }
 
     /**
