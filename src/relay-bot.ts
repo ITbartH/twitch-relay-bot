@@ -22,7 +22,12 @@ class TwitchRelayBot {
     private maxReconnectAttempts = 10;
     private reconnectDelay = 5000; // 5 sekund
     private lastMessageTime = 0;
-    private messageRateLimit = 1000; // 1 sekunda między wiadomościami
+
+    private messageRateLimit = 3000;
+    private maxMessagesPerMinute = 20;
+    private messageCount = 0;
+    private minuteTimer?: NodeJS.Timeout;
+
     private lastMessages: Map<string, string> = new Map();
     private readonly MAX_STORED_USERS = 200;   // ⬅️ możesz zmienić
 
@@ -201,6 +206,18 @@ class TwitchRelayBot {
     private async relayMessage(originalMessage: string, originalUser: string): Promise<void> {
         try {
             // Sprawdź rate limit
+
+            if (this.messageCount >= this.maxMessagesPerMinute) {
+                console.log('⏳ Osiągnięto limit wiadomości na minutę, czekam...');
+                return;
+            }
+
+            if (!this.minuteTimer) {
+                this.minuteTimer = setInterval(() => {
+                    this.messageCount = 0;
+                }, 60000);
+            }
+
             const currentTime = Date.now();
             if (currentTime - this.lastMessageTime < this.messageRateLimit) {
                 console.log('⏳ Rate limit - czekam przed wysłaniem wiadomości');
@@ -276,6 +293,7 @@ class TwitchRelayBot {
                 }, 3000);
             }
         }
+        this.messageCount++;
     }
 
     private handleReconnect(): void {
