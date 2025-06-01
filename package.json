@@ -1,0 +1,40 @@
+{
+  "name": "twitch-relay-bot",
+  "version": "1.0.0",
+  "description": "Bot przekazujący wiadomości o banach między kanałami Twitch",
+  "main": "dist/relay-bot.js",
+  "scripts": {
+    "dev": "tsx watch src/relay-bot.ts",
+    "build": "tsc",
+    "start": "node dist/relay-bot.js",
+    "auth": "tsx src/generate-token.ts",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "twitch",
+    "bot", 
+    "relay",
+    "irc",
+    "7tv",
+    "moderation"
+  ],
+  "author": "Twój Nick",
+  "license": "MIT",
+  "dependencies": {
+    "tmi.js": "^1.8.5",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "@types/tmi.js": "^1.8.6",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.56.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
