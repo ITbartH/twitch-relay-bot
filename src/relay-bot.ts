@@ -24,7 +24,7 @@ class TwitchRelayBot {
     private lastMessageTime = 0;
 
     private messageRateLimit = 3000;
-    private maxMessagesPerMinute = 20;
+    private maxMessagesPerMinute = 3;
     private messageCount = 0;
     private minuteTimer?: NodeJS.Timeout;
 
