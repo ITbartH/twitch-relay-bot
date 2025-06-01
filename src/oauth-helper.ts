@@ -157,7 +157,7 @@ export class TwitchOAuthHelper {
       });
 
       server.listen(3000, () => {
-        console.log('🌐 Serwer callback uruchomiony na http://localhost:3000');
+        console.log('🌐 Serwer callback uruchomiony na ' + this.redirectUri);
       });
 
       server.on('error', (err) => {
