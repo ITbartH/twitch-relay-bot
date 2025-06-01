@@ -132,7 +132,7 @@ class TwitchRelayBot {
         });
 
         // Błędy połączenia
-        this.client.on('error', (err) => {
+        this.client.on('error' as any, (err: Error) => {
             console.error('🚨 Błąd połączenia:', err.message);
             if (err.message.includes('Login authentication failed')) {
                 console.error('❌ BŁĄD UWIERZYTELNIANIA: Sprawdź TWITCH_OAUTH_TOKEN');
@@ -152,9 +152,9 @@ class TwitchRelayBot {
             this.lastMessages.delete(username.toLowerCase());
         });
 
-        
 
-        
+
+
 
         // Otrzymana wiadomość
         this.client.on('message', async (channel, userstate, message, self) => {
