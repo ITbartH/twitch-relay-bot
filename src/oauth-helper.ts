@@ -26,7 +26,7 @@ export class TwitchOAuthHelper {
   private scopes: string[];
   private tokenFilePath: string;
 
-  constructor(clientId: string, clientSecret: string, redirectUri = 'https://twitch-relay-bot-production.up.railway.app/callback') {
+  constructor(clientId: string, clientSecret: string, redirectUri = 'http://localhost:3000/callback') {
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     this.redirectUri = redirectUri;

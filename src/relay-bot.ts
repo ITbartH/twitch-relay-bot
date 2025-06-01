@@ -132,7 +132,7 @@ class TwitchRelayBot {
         });
 
         // Błędy połączenia
-        this.client.on('error' as any, (err: Error) => {
+        this.client.on('error', (err) => {
             console.error('🚨 Błąd połączenia:', err.message);
             if (err.message.includes('Login authentication failed')) {
                 console.error('❌ BŁĄD UWIERZYTELNIANIA: Sprawdź TWITCH_OAUTH_TOKEN');
@@ -142,7 +142,7 @@ class TwitchRelayBot {
 
         this.client.on('ban', async (channel, username, reason, userstate) => {
             const lastMsg = this.lastMessages.get(username.toLowerCase()) || 'brak danych';
-            const relay = `${channel} właśnie zbanował ${username}. 60 `
+            const relay = `Mamm0n właśnie zbanował ${username}. 60 `
                 + ` | Ostatnia wiadomość: "${lastMsg}". `
                 + ` | Powód: ${reason || 'brak'}.`;
             console.log('[BAN detected] ->', relay);
@@ -152,9 +152,9 @@ class TwitchRelayBot {
             this.lastMessages.delete(username.toLowerCase());
         });
 
+        
 
-
-
+        
 
         // Otrzymana wiadomość
         this.client.on('message', async (channel, userstate, message, self) => {
@@ -168,7 +168,7 @@ class TwitchRelayBot {
             if (sender) this.rememberMessage(sender, message);
 
             // 3b ► log (pomaga w debugowaniu)
-            //console.log(`[${channelName}] ${sender}: ${message}`);
+            console.log(`[${channelName}] ${sender}: ${message}`);
 
             // (Jeśli zostawiasz regex-based wykrywanie banów w zwykłych msg)
             if (this.isBanMessage(message)) {
