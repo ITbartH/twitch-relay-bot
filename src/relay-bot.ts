@@ -209,11 +209,11 @@ class TwitchRelayBot {
 
             let relay: string;
             if (!processedMsg.shouldSend) {
-                relay = `60 ${cleanChannel} zbanował @${username}. 60 `
+                relay = ` ${cleanChannel} zbanował @${username}. 60 `
                     + ` Ostatnie słowa: [wiadomość usunięta - nieodpowiednia treść]. JasperSalute`;
             } else {
                 const msgSuffix = processedMsg.wasFiltered ? ' [ocenzurowano]' : '';
-                relay = `60 ${cleanChannel} zbanował @${username}. 60 `
+                relay = ` ${cleanChannel} zbanował @${username}. 60 `
                     + ` Ostatnie słowa: "${processedMsg.processedMessage}"${msgSuffix}. JasperSalute`;
             }
 
