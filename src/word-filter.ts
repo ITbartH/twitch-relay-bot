@@ -124,7 +124,7 @@ export class WordFilter {
         
         // Lista szczególnie drastycznych słów które blokują całą wiadomość
         const blockingWords = [
-            ''
+            'dgasudg7632gd67agsdasdhsad'
         ];
         
         return blockingWords.some(word => {
