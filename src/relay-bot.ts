@@ -203,6 +203,9 @@ class TwitchRelayBot {
         });
 
         this.client.on('ban', async (channel, username, reason, userstate) => {
+            const cleanChannelName = channel.replace(/^#/, '').toLowerCase();
+            if (cleanChannelName !== this.config.sourceChannel.toLowerCase()) return;
+
             const cleanChannel = channel.replace(/^#/, '').replace(/^./, c => c.toUpperCase());
             const lastMsg = this.lastMessages.get(username.toLowerCase()) || 'brak danych';
             const processedMsg = this.processMessageForRelay(lastMsg, 'ban');
