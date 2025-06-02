@@ -24,8 +24,8 @@ class TwitchRelayBot {
     private reconnectDelay = 5000; // 5 sekund
     private lastMessageTime = 0;
 
-    private messageRateLimit = 3000;
-    private maxMessagesPerMinute = 3;
+    private messageRateLimit = 5000;
+    private maxMessagesPerMinute = 2;
     private messageCount = 0;
     private minuteTimer?: NodeJS.Timeout;
 
@@ -33,6 +33,9 @@ class TwitchRelayBot {
     private readonly MAX_STORED_USERS = 200;   // ⬅️ możesz zmienić
 
     private wordFilter: WordFilter = new WordFilter(false);
+
+    private lastSentMessage = '';
+    private lastSentTime = 0;
 
     private processMessageForRelay(message: string, context: 'ban' | 'normal' = 'normal'): {
         shouldSend: boolean;
@@ -112,7 +115,7 @@ class TwitchRelayBot {
 
         this.client = this.createClient();
         this.setupEventHandlers();
-        this.testWordFilter();
+        
     }
 
     private loadConfig(): BotConfig {
@@ -313,6 +316,12 @@ class TwitchRelayBot {
             }
 
             // Wyślij wiadomość na kanał docelowy z dodatkowym debugowaniem
+            if (relayMessage === this.lastSentMessage &&
+                currentTime - this.lastSentTime < 10000) { // 10s
+                return;
+            }
+            this.lastSentMessage = relayMessage;
+            this.lastSentTime = currentTime;
             const result = await this.client.say(`#${this.config.targetChannel}`, relayMessage);
             console.log('🔍 Debug - rezultat say():', result);
 
@@ -322,18 +331,6 @@ class TwitchRelayBot {
             console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser || 'system'})`);
             console.log(`   📍 Do: #${this.config.targetChannel}`);
             console.log(`   💬 Treść: ${originalMessage}`);
-
-            // Dodatkowa weryfikacja - spróbuj wysłać testową wiadomość co jakiś czas
-            if (Math.random() < 0.1) { // 10% szans na test
-                setTimeout(async () => {
-                    try {
-                        await this.client.say(`#${this.config.targetChannel}`, "🔧 Test połączenia bota");
-                        console.log('✅ Test wiadomość wysłana pomyślnie');
-                    } catch (testError) {
-                        console.error('❌ Test wiadomość nie poszła:', testError);
-                    }
-                }, 2000);
-            }
 
         } catch (error) {
             console.error('❌ Błąd podczas przekazywania wiadomości:', error);
