@@ -4,23 +4,19 @@ export class WordFilter {
     private bannedWords: string[] = [
         // Rasistowskie/dyskryminacyjne
         'murzyn', 'czarnuch', 'żółtek', 'żydek', 'żydek', 'żydas',
-        'pedał', 'ciapak', 'gej', 'homo', 'lesbijka',
-        
-        // Wulgaryzmy dotyczące grup
-        'kurwa', 'chuj', 'pizda', 'dupa', 'gówno',
-        'jebać', 'pierdolić', 'spierdalaj',
+        'pedał', 'ciapak', 'simp', 'incel', 'cuckold', 'kys', 
         
         // Terminy nazistowskie/skrajne
-        'hitler', 'nazi', 'heil', '1488', '88', '14/88',
+        'hitler', 'nazi', 'heil',
         
-        // Homofobiczne
-        'pedofil', 'zboczeniec', 'degenerat',
         
-        // Antysemickie
-        'holocaust', 'holokaust', 'żydokomuna', 'żydzi',
+        'pedofil', 'zboczeniec', 'degenerat', 'cwel', 'niger', 'pedzio', 'pedziu',
         
-        // Rasistowskie angielskie (często używane)
-        'nigger', 'nigga', 'faggot', 'retard', 'spic', 'chink'
+       
+        'holocaust', 'holokaust', 'żydokomuna', 'żydzi', 'żyd',
+        
+     
+        'nigger', 'nigga', 'faggot', 'retard', 'spic', 'chink', 'nygus', 'nugysek',
     ];
 
     private replacementChar = '*';
@@ -68,10 +64,9 @@ export class WordFilter {
         
         // Lista wyjątków - słowa które zawierają zakazane słowa ale są OK
         const exceptions: { [key: string]: string[] } = {
-            'gej': ['negacja', 'geografia', 'algebra', 'vegetation'],
-            'dupa': ['podstawa', 'fundament', 'duplikat'],
-            'kurwa': ['merkury', 'kurczak'], // rzadko ale może się zdarzyć
-            'nazi': ['gymnasium', 'organizacja'] // dla 'nazi' w środku
+            'nazi': ['gymnasium', 'organizacja', 'organization', 'magazine', 'amazon'],
+            'rape': ['grape', 'drape', 'paper', 'therapy', 'prepare'],
+            'jew': ['jewelry', 'jewel', 'jewish'], // kontekst ma znaczenie
         };
         
         if (exceptions[normalizedBanned]) {
@@ -129,8 +124,7 @@ export class WordFilter {
         
         // Lista szczególnie drastycznych słów które blokują całą wiadomość
         const blockingWords = [
-            'hitler', 'nazi', 'heil', '1488', 'holocaust', 'holokaust',
-            'nigger', 'faggot'
+            'hitler'
         ];
         
         return blockingWords.some(word => {
