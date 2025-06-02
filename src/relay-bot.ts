@@ -37,6 +37,8 @@ class TwitchRelayBot {
     private lastSentMessage = '';
     private lastSentTime = 0;
 
+    private tokenValidationTimer?: NodeJS.Timeout;
+
     private processMessageForRelay(message: string, context: 'ban' | 'normal' = 'normal'): {
         shouldSend: boolean;
         processedMessage: string;
@@ -115,7 +117,7 @@ class TwitchRelayBot {
 
         this.client = this.createClient();
         this.setupEventHandlers();
-        
+
     }
 
     private loadConfig(): BotConfig {
@@ -181,6 +183,28 @@ class TwitchRelayBot {
 
         this.lastMessages.set(nick, msg);
     }
+
+    private setupTokenValidation(): void {
+        // Waliduj token co 50 minut (przed wygaśnięciem)
+        this.tokenValidationTimer = setInterval(async () => {
+            if (this.oauthHelper && this.config.oauthToken) {
+                const isValid = await this.oauthHelper.validateToken(this.config.oauthToken);
+                if (!isValid) {
+                    console.log('🔄 Token wygasł - odświeżanie...');
+                    try {
+                        this.config.oauthToken = await this.oauthHelper.getValidToken();
+                        // Restart klienta z nowym tokenem
+                        await this.client.disconnect();
+                        this.client = this.createClient();
+                        this.setupEventHandlers();
+                        await this.client.connect();
+                    } catch (error) {
+                        console.error('❌ Błąd odświeżania tokenu:', error);
+                    }
+                }
+            }
+        }, 50 * 60 * 1000); // 50 minut
+    }
     private setupEventHandlers(): void {
         // Połączenie nawiązane
         this.client.on('connected', (addr, port) => {
@@ -197,10 +221,19 @@ class TwitchRelayBot {
         });
 
         // Błędy połączenia
-        this.client.on('error' as any, (err: Error) => {
+        this.client.on('error' as any, async (err: Error) => {
             console.error('🚨 Błąd połączenia:', err.message);
             if (err.message.includes('Login authentication failed')) {
-                console.error('❌ BŁĄD UWIERZYTELNIANIA: Sprawdź TWITCH_OAUTH_TOKEN');
+                console.log('🔄 Błąd auth - próba odświeżenia tokenu...');
+                if (this.oauthHelper) {
+                    try {
+                        this.config.oauthToken = await this.oauthHelper.getValidToken();
+                        await this.client.connect();
+                        return;
+                    } catch (refreshError) {
+                        console.error('❌ Nie udało się odświeżyć tokenu:', refreshError);
+                    }
+                }
                 process.exit(1);
             }
         });
@@ -270,6 +303,8 @@ class TwitchRelayBot {
         this.client.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
             console.log(`⚠️ Wiadomość usunięta: ${deletedMessage}`);
         });
+
+
     }
 
     private isBanMessage(message: string): boolean {
@@ -425,6 +460,7 @@ class TwitchRelayBot {
             console.log(`   🎯 Cel: #${this.config.targetChannel}`);
 
             await this.client.connect();
+            this.setupTokenValidation();
         } catch (error) {
             console.error('❌ Błąd podczas uruchamiania bota:', error);
             process.exit(1);
