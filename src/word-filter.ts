@@ -4,7 +4,7 @@ export class WordFilter {
     private bannedWords: string[] = [
         // Rasistowskie/dyskryminacyjne
         'murzyn', 'czarnuch', 'żółtek', 'żydek', 'żydek', 'żydas',
-        'pedał', 'ciapak', 'simp', 'incel', 'cuckold', 'kys', 
+        'pedał', 'ciapak', 'simp', 'incel', 'cuckold', 'kys',
         
         // Terminy nazistowskie/skrajne
         'hitler', 'nazi', 'heil',
@@ -124,7 +124,7 @@ export class WordFilter {
         
         // Lista szczególnie drastycznych słów które blokują całą wiadomość
         const blockingWords = [
-            'hitler'
+            ''
         ];
         
         return blockingWords.some(word => {
