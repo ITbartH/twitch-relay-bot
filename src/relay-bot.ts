@@ -130,18 +130,16 @@ class TwitchRelayBot {
         }
 
         // Sprawdź czy mamy token OAuth lub dane do jego wygenerowania
-        const hasOAuthToken = !!process.env.TWITCH_OAUTH_TOKEN;
+        const hasOAuthToken = false; // Wymuś użycie OAuth flow
         const hasClientCredentials = !!(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET);
 
-        if (!hasOAuthToken && !hasClientCredentials) {
-            throw new Error(
-                'Wymagany jest TWITCH_OAUTH_TOKEN lub para TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET'
-            );
+        if (!hasClientCredentials) {
+            throw new Error('Wymagane są TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET');
         }
 
         return {
             botUsername: process.env.TWITCH_BOT_USERNAME!,
-            oauthToken: process.env.TWITCH_OAUTH_TOKEN || '', // Może być pusty jeśli używamy OAuth
+            oauthToken: '', // Może być pusty jeśli używamy OAuth
             sourceChannel: process.env.SOURCE_CHANNEL!,
             targetChannel: process.env.TARGET_CHANNEL!,
             clientId: process.env.TWITCH_CLIENT_ID,
