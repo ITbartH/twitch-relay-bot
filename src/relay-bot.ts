@@ -80,7 +80,7 @@ class TwitchRelayBot {
             "Pozdraiwam konfi",
             "Test z wulgaryzmem kurwa",
             "Test rasistowski murzyn",
-            "Test drastyczny hitler"
+            "Test drastyczny cwelu"
         ];
 
         console.log('🧪 Test filtra słów:');
@@ -481,6 +481,7 @@ class TwitchRelayBot {
 
             await this.client.connect();
             this.setupTokenValidation();
+            this.testWordFilter();
         } catch (error) {
             console.error('❌ Błąd podczas uruchamiania bota:', error);
             process.exit(1);

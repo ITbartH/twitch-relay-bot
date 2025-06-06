@@ -4,7 +4,7 @@ export class WordFilter {
     private bannedWords: string[] = [
         // Rasistowskie/dyskryminacyjne
         'murzyn', 'czarnuch', 'żółtek', 'żydek', 'żydek', 'żydas',
-        'pedał', 'ciapak', 'simp', 'incel', 'cuckold', 'kys',
+        'pedał', 'ciapak', 'simp', 'incel', 'cuckold', 'kys', 'cwelu', 'cwelowy', 'pedale', 'pedalski', 'spedalony', 'cwelowaty', 'cwelowany', 'cweluszku',
         
         // Terminy nazistowskie/skrajne
         'hitler', 'nazi', 'heil',
@@ -13,7 +13,7 @@ export class WordFilter {
         'pedofil', 'zboczeniec', 'degenerat', 'cwel', 'niger', 'pedzio', 'pedziu',
         
        
-        'holocaust', 'holokaust', 'żydokomuna', 'żydzi', 'żyd',
+        'holocaust', 'holokaust', 'żydokomuna', 'żydzi', 'żyd', 'nigerze',
         
      
         'nigger', 'nigga', 'faggot', 'retard', 'spic', 'chink', 'nygus', 'nugysek',
