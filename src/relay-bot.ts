@@ -40,7 +40,7 @@ class TwitchRelayBot {
 
     private tokenValidationTimer?: NodeJS.Timeout;
 
-    private processMessageForRelay(message: string, context: 'ban' | 'normal' = 'normal'): {
+    private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'normal' = 'normal'): {
         shouldSend: boolean;
         processedMessage: string;
         wasFiltered: boolean;
@@ -299,9 +299,30 @@ class TwitchRelayBot {
             }
         });
 
-        // Rate limiting
-        this.client.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
-            console.log(`⚠️ Wiadomość usunięta: ${deletedMessage}`);
+        this.client.on('messagedeleted', async (channel, username, deletedMessage, userstate) => {
+            const cleanChannelName = channel.replace(/^#/, '').toLowerCase();
+            if (cleanChannelName !== this.config.sourceChannel.toLowerCase()) return;
+
+            const cleanChannel = channel.replace(/^#/, '').replace(/^./, c => c.toUpperCase());
+            const processedMsg = this.processMessageForRelay(deletedMessage, 'delete');
+
+            let relay: string;
+            if (!processedMsg.shouldSend) {
+                relay = ` ${cleanChannel} usunął wiadomość @${username}. 60 `
+                    + ` Treść: [wiadomość usunięta - nieodpowiednia treść]. JasperSalute`;
+            } else {
+                const msgSuffix = processedMsg.wasFiltered ? ' [ocenzurowano]' : '';
+                relay = ` ${cleanChannel} usunął wiadomość @${username}. 60 `
+                    + ` Treść: "${processedMsg.processedMessage}"${msgSuffix}. JasperSalute`;
+            }
+
+            console.log('[DELETED message] ->', relay);
+
+            try {
+                await this.relayMessage(relay, '');
+            } catch (err) {
+                console.error('Błąd przy relayMessage (deleted):', err);
+            }
         });
 
 
