@@ -168,7 +168,7 @@ class TwitchRelayBot {
                 username: this.config.botUsername,
                 password: this.config.oauthToken
             },
-            channels: [this.config.sourceChannel, this.config.targetChannel]  // <-- tu oba kanały
+            channels: [this.config.sourceChannel, this.config.targetChannel, this.config.targetChannel2]  // <-- tu oba kanały
         });
     }
 
@@ -210,7 +210,7 @@ class TwitchRelayBot {
         this.client.on('connected', (addr, port) => {
             console.log(`✅ Bot połączony z ${addr}:${port}`);
             console.log(`📺 Monitoruję kanał: #${this.config.sourceChannel}`);
-            console.log(`🎯 Przekazuję do kanału: #${this.config.targetChannel}`);
+            console.log(`🎯 Przekazuję do kanałów: #${this.config.targetChannel}, ${this.config.targetChannel2}`);
             this.reconnectAttempts = 0;
         });
 
@@ -338,10 +338,6 @@ class TwitchRelayBot {
                 `${originalUser}: ${originalMessage}` :
                 originalMessage;
 
-            console.log(`🔍 Debug - próba wysłania na kanał: #${this.config.targetChannel}`);
-            console.log(`🔍 Debug - treść wiadomości: "${relayMessage}"`);
-            console.log(`🔍 Debug - status połączenia: ${this.client.readyState()}`);
-
             // Sprawdź czy klient jest połączony
             if (this.client.readyState() !== 'OPEN') {
                 console.error('❌ Klient nie jest połączony! Status:', this.client.readyState());
@@ -366,6 +362,7 @@ class TwitchRelayBot {
             console.log(`📤 Przekazano wiadomość:`);
             console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser || 'system'})`);
             console.log(`   📍 Do: #${this.config.targetChannel}`);
+            console.log(`   📍 Do: #${this.config.targetChannel2}`);
             console.log(`   💬 Treść: ${originalMessage}`);
 
         } catch (error) {
@@ -459,6 +456,7 @@ class TwitchRelayBot {
             console.log(`   🤖 Bot: ${this.config.botUsername}`);
             console.log(`   📺 Źródło: #${this.config.sourceChannel}`);
             console.log(`   🎯 Cel: #${this.config.targetChannel}`);
+            console.log(`   🎯 Cel: #${this.config.targetChannel2}`);
 
             await this.client.connect();
             this.setupTokenValidation();
