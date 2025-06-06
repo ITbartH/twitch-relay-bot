@@ -11,6 +11,7 @@ interface BotConfig {
     oauthToken: string;
     sourceChannel: string;
     targetChannel: string;
+    targetChannel2: string;
     clientId?: string;
     clientSecret?: string;
 }
@@ -142,6 +143,7 @@ class TwitchRelayBot {
             oauthToken: '', // Może być pusty jeśli używamy OAuth
             sourceChannel: process.env.SOURCE_CHANNEL!,
             targetChannel: process.env.TARGET_CHANNEL!,
+            targetChannel2: process.env.TARGET_CHANNEL2!,
             clientId: process.env.TWITCH_CLIENT_ID,
             clientSecret: process.env.TWITCH_CLIENT_SECRET
         };
@@ -356,6 +358,7 @@ class TwitchRelayBot {
             this.lastSentMessage = relayMessage;
             this.lastSentTime = currentTime;
             const result = await this.client.say(`#${this.config.targetChannel}`, relayMessage);
+            const result2 = await this.client.say(`#${this.config.targetChannel2}`, relayMessage);
             console.log('🔍 Debug - rezultat say():', result);
 
             this.lastMessageTime = Date.now();
