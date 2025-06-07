@@ -80,7 +80,7 @@ class TwitchRelayBot {
             "Pozdraiwam konfi",
             "Test z wulgaryzmem kurwa",
             "Test rasistowski murzyn",
-            "Test drastyczny cwelu"
+            "Test drastyczny cwelu pedale nigerze"
         ];
 
         console.log('🧪 Test filtra słów:');
@@ -281,14 +281,6 @@ class TwitchRelayBot {
             // 3b ► log (pomaga w debugowaniu)
             //console.log(`[${channelName}] ${sender}: ${message}`);
 
-            // (Jeśli zostawiasz regex-based wykrywanie banów w zwykłych msg)
-            if (this.isBanMessage(message)) {
-                console.log('🚨 Wykryto ban (regex w message)');
-                await this.relayMessage(
-                    `Użytkownik ${sender} został zbanowany. Ostatnia wiadomość: "${message}".`,
-                    'system'
-                );
-            }
         });
 
 
