@@ -22,16 +22,17 @@ class TwitchRelayBot {
     private oauthHelper?: TwitchOAuthHelper;
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 10;
-    private reconnectDelay = 5000; // 5 sekund
+    private reconnectDelay = 5000;
     private lastMessageTime = 0;
+    private isReconnecting = false;
 
-    private messageRateLimit = 5000;
-    private maxMessagesPerMinute = 2;
+    private messageRateLimit = 2000; // Zmniejszone z 5000 na 2000ms
+    private maxMessagesPerMinute = 20; // Zwiększone z 2 na 20
     private messageCount = 0;
     private minuteTimer?: NodeJS.Timeout;
 
     private lastMessages: Map<string, string> = new Map();
-    private readonly MAX_STORED_USERS = 200;   // ⬅️ możesz zmienić
+    private readonly MAX_STORED_USERS = 200;
 
     private wordFilter: WordFilter = new WordFilter(false);
 
@@ -39,6 +40,9 @@ class TwitchRelayBot {
     private lastSentTime = 0;
 
     private tokenValidationTimer?: NodeJS.Timeout;
+    private healthCheckTimer?: NodeJS.Timeout;
+    private messageQueue: Array<{message: string, user: string}> = [];
+    private isProcessingQueue = false;
 
     private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'normal' = 'normal'): {
         shouldSend: boolean;
@@ -47,7 +51,6 @@ class TwitchRelayBot {
     } {
         const analysis = this.wordFilter.analyzeText(message);
 
-        // Jeśli wiadomość zawiera szczególnie drastyczne słowa - zablokuj całkowicie
         if (analysis.shouldBlock) {
             console.log('🚫 Wiadomość zablokowana ze względu na drastyczną treść');
             return {
@@ -57,7 +60,6 @@ class TwitchRelayBot {
             };
         }
 
-        // Jeśli zawiera zakazane słowa - ocenzuruj
         if (analysis.containsBanned) {
             console.log(`⚠️ Ocenzurowano wiadomość. Znalezione słowa: ${analysis.foundWords.join(', ')}`);
             return {
@@ -67,7 +69,6 @@ class TwitchRelayBot {
             };
         }
 
-        // Wiadomość czysta
         return {
             shouldSend: true,
             processedMessage: message,
@@ -80,7 +81,7 @@ class TwitchRelayBot {
             "Pozdraiwam konfi",
             "Test z wulgaryzmem kurwa",
             "Test rasistowski murzyn",
-            "Test drastyczny cwelu pedale nigerze"
+            "Test drastyczny cwelu pedale nigerze kys simpie"
         ];
 
         console.log('🧪 Test filtra słów:');
@@ -94,7 +95,6 @@ class TwitchRelayBot {
         });
     }
 
-    // Wzorce regex do wykrywania wiadomości o banach z 7tv
     private banPatterns = [
         /has been (permanently )?banned/i,
         /został (na stałe )?zbanowany/i,
@@ -108,7 +108,6 @@ class TwitchRelayBot {
     constructor() {
         this.config = this.loadConfig();
 
-        // Jeśli mamy Client ID/Secret, użyj OAuth helper
         if (this.config.clientId && this.config.clientSecret) {
             this.oauthHelper = new TwitchOAuthHelper(
                 this.config.clientId,
@@ -118,7 +117,6 @@ class TwitchRelayBot {
 
         this.client = this.createClient();
         this.setupEventHandlers();
-
     }
 
     private loadConfig(): BotConfig {
@@ -130,8 +128,6 @@ class TwitchRelayBot {
             }
         }
 
-        // Sprawdź czy mamy token OAuth lub dane do jego wygenerowania
-        const hasOAuthToken = false; // Wymuś użycie OAuth flow
         const hasClientCredentials = !!(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET);
 
         if (!hasClientCredentials) {
@@ -140,7 +136,7 @@ class TwitchRelayBot {
 
         return {
             botUsername: process.env.TWITCH_BOT_USERNAME!,
-            oauthToken: '', // Może być pusty jeśli używamy OAuth
+            oauthToken: '',
             sourceChannel: process.env.SOURCE_CHANNEL!,
             targetChannel: process.env.TARGET_CHANNEL!,
             targetChannel2: process.env.TARGET_CHANNEL2!,
@@ -152,30 +148,27 @@ class TwitchRelayBot {
     private createClient(): tmi.Client {
         return new tmi.Client({
             options: {
-                debug: process.env.NODE_ENV === 'development',
-                messagesLogLevel: 'info'  // może niech będzie info, aby lepiej widzieć logi
+                debug: false, // Wyłączone debug dla stabilności
+                messagesLogLevel: 'error' // Tylko błędy
             },
             connection: {
-                reconnect: true,
+                reconnect: false, // Wyłączone auto-reconnect, będziemy to robić manualnie
                 secure: true,
-                timeout: 180000,
-                reconnectDecay: 1.5,
-                reconnectInterval: 1000,
-                maxReconnectAttempts: this.maxReconnectAttempts,
-                maxReconnectInterval: 30000
+                timeout: 30000, // Zmniejszone timeout
+                maxReconnectAttempts: 0, // Wyłączone auto-reconnect
+                maxReconnectInterval: 5000
             },
             identity: {
                 username: this.config.botUsername,
                 password: this.config.oauthToken
             },
-            channels: [this.config.sourceChannel, this.config.targetChannel, this.config.targetChannel2]  // <-- tu oba kanały
+            channels: [this.config.sourceChannel, this.config.targetChannel, this.config.targetChannel2]
         });
     }
 
     private rememberMessage(user: string, msg: string) {
         const nick = user.toLowerCase();
 
-        // Jeśli przekroczono limit — usuń najstarszy wpis (FIFO)
         if (this.lastMessages.size >= this.MAX_STORED_USERS) {
             const oldestKey = this.lastMessages.keys().next().value;
             this.lastMessages.delete(oldestKey);
@@ -184,29 +177,89 @@ class TwitchRelayBot {
         this.lastMessages.set(nick, msg);
     }
 
+    private setupHealthCheck(): void {
+        // Health check co 30 sekund
+        this.healthCheckTimer = setInterval(async () => {
+            if (this.client.readyState() !== 'OPEN' && !this.isReconnecting) {
+                console.log('🔍 Health check: Klient nie jest połączony, próba reconnect...');
+                await this.reconnectClient();
+            }
+        }, 30000);
+    }
+
+    private async reconnectClient(): Promise<void> {
+        if (this.isReconnecting) return;
+        
+        this.isReconnecting = true;
+        console.log('🔄 Rozpoczynam reconnect...');
+
+        try {
+            // Wyczyść stary klient
+            if (this.client) {
+                await this.client.disconnect().catch(() => {});
+            }
+
+            // Odśwież token jeśli możliwe
+            if (this.oauthHelper) {
+                const newToken = await this.oauthHelper.getValidToken();
+                if (newToken) {
+                    this.config.oauthToken = newToken;
+                }
+            }
+
+            // Utwórz nowego klienta
+            this.client = this.createClient();
+            this.setupEventHandlers();
+            
+            // Połącz
+            await this.client.connect();
+            console.log('✅ Reconnect zakończony sukcesem');
+            
+            this.reconnectAttempts = 0;
+            this.reconnectDelay = 5000;
+            
+        } catch (error) {
+            console.error('❌ Błąd podczas reconnect:', error);
+            this.reconnectAttempts++;
+            
+            if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                console.error('❌ Przekroczono limit prób reconnect');
+                process.exit(1);
+            }
+            
+            // Exponential backoff
+            this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 60000);
+            console.log(`⏳ Kolejna próba za ${this.reconnectDelay / 1000}s...`);
+            
+            setTimeout(() => {
+                this.reconnectClient();
+            }, this.reconnectDelay);
+        } finally {
+            this.isReconnecting = false;
+        }
+    }
+
     private setupTokenValidation(): void {
-        // Waliduj token co 50 minut (przed wygaśnięciem)
         this.tokenValidationTimer = setInterval(async () => {
             if (this.oauthHelper && this.config.oauthToken) {
                 const isValid = await this.oauthHelper.validateToken(this.config.oauthToken);
                 if (!isValid) {
                     console.log('🔄 Token wygasł - odświeżanie...');
                     try {
-                        this.config.oauthToken = await this.oauthHelper.getValidToken();
-                        // Restart klienta z nowym tokenem
-                        await this.client.disconnect();
-                        this.client = this.createClient();
-                        this.setupEventHandlers();
-                        await this.client.connect();
+                        const newToken = await this.oauthHelper.getValidToken();
+                        if (newToken) {
+                            this.config.oauthToken = newToken;
+                            await this.reconnectClient();
+                        }
                     } catch (error) {
                         console.error('❌ Błąd odświeżania tokenu:', error);
                     }
                 }
             }
-        }, 50 * 60 * 1000); // 50 minut
+        }, 50 * 60 * 1000);
     }
+
     private setupEventHandlers(): void {
-        // Połączenie nawiązane
         this.client.on('connected', (addr, port) => {
             console.log(`✅ Bot połączony z ${addr}:${port}`);
             console.log(`📺 Monitoruję kanał: #${this.config.sourceChannel}`);
@@ -214,27 +267,18 @@ class TwitchRelayBot {
             this.reconnectAttempts = 0;
         });
 
-        // Rozłączenie
         this.client.on('disconnected', (reason) => {
             console.log(`❌ Bot rozłączony: ${reason}`);
-            this.handleReconnect();
+            if (!this.isReconnecting) {
+                setTimeout(() => this.reconnectClient(), 2000);
+            }
         });
 
-        // Błędy połączenia
         this.client.on('error' as any, async (err: Error) => {
             console.error('🚨 Błąd połączenia:', err.message);
-            if (err.message.includes('Login authentication failed')) {
-                console.log('🔄 Błąd auth - próba odświeżenia tokenu...');
-                if (this.oauthHelper) {
-                    try {
-                        this.config.oauthToken = await this.oauthHelper.getValidToken();
-                        await this.client.connect();
-                        return;
-                    } catch (refreshError) {
-                        console.error('❌ Nie udało się odświeżyć tokenu:', refreshError);
-                    }
-                }
-                process.exit(1);
+            
+            if (!this.isReconnecting) {
+                setTimeout(() => this.reconnectClient(), 1000);
             }
         });
 
@@ -257,17 +301,10 @@ class TwitchRelayBot {
             }
 
             console.log('[BAN detected] ->', relay);
-            await this.relayMessage(relay, '');
-
-            // porządek w pamięci
+            this.queueMessage(relay, '');
             this.lastMessages.delete(username.toLowerCase());
         });
 
-
-
-
-
-        // Otrzymana wiadomość
         this.client.on('message', async (channel, userstate, message, self) => {
             if (self) return;
 
@@ -275,16 +312,9 @@ class TwitchRelayBot {
             if (channelName !== this.config.sourceChannel.toLowerCase()) return;
 
             const sender = userstate['display-name'] || userstate.username || '';
-            // 3a ► zapisz wiadomość
             if (sender) this.rememberMessage(sender, message);
-
-            // 3b ► log (pomaga w debugowaniu)
-            //console.log(`[${channelName}] ${sender}: ${message}`);
-
         });
 
-
-        // Informacje o dołączeniu do kanału
         this.client.on('join', (channel, username, self) => {
             if (self) {
                 console.log(`🎉 Dołączono do kanału: ${channel}`);
@@ -309,28 +339,42 @@ class TwitchRelayBot {
             }
 
             console.log('[DELETED message] ->', relay);
-
-            try {
-                await this.relayMessage(relay, '');
-            } catch (err) {
-                console.error('Błąd przy relayMessage (deleted):', err);
-            }
+            this.queueMessage(relay, '');
         });
-
-
     }
 
-    private isBanMessage(message: string): boolean {
-        return this.banPatterns.some(pattern => pattern.test(message));
+    private queueMessage(message: string, user: string): void {
+        this.messageQueue.push({ message, user });
+        this.processQueue();
     }
 
-    private async relayMessage(originalMessage: string, originalUser: string): Promise<void> {
+    private async processQueue(): Promise<void> {
+        if (this.isProcessingQueue || this.messageQueue.length === 0) return;
+        
+        this.isProcessingQueue = true;
 
-        try {
-            // Sprawdź rate limit
-
+        while (this.messageQueue.length > 0) {
             if (this.messageCount >= this.maxMessagesPerMinute) {
-                console.log('⏳ Osiągnięto limit wiadomości na minutę, czekam...');
+                console.log('⏳ Rate limit - czekam na reset licznika');
+                break;
+            }
+
+            const item = this.messageQueue.shift();
+            if (item) {
+                await this.sendMessage(item.message, item.user);
+                await this.sleep(this.messageRateLimit);
+            }
+        }
+
+        this.isProcessingQueue = false;
+    }
+
+    private async sendMessage(originalMessage: string, originalUser: string): Promise<void> {
+        try {
+            if (!this.client || this.client.readyState() !== 'OPEN') {
+                console.log('❌ Klient nie jest połączony - dodaję z powrotem do kolejki');
+                this.messageQueue.unshift({ message: originalMessage, user: originalUser });
+                await this.reconnectClient();
                 return;
             }
 
@@ -340,96 +384,50 @@ class TwitchRelayBot {
                 }, 60000);
             }
 
-            const currentTime = Date.now();
-            if (currentTime - this.lastMessageTime < this.messageRateLimit) {
-                console.log('⏳ Rate limit - czekam przed wysłaniem wiadomości');
-                await this.sleep(this.messageRateLimit - (currentTime - this.lastMessageTime));
-            }
-
-            // Lepsze formatowanie wiadomości - usuń pusty originalUser
-            const relayMessage = originalUser ?
-                `${originalUser}: ${originalMessage}` :
+            const relayMessage = originalUser ? 
+                `${originalUser}: ${originalMessage}` : 
                 originalMessage;
 
-            // Sprawdź czy klient jest połączony
-            if (this.client.readyState() !== 'OPEN') {
-                console.error('❌ Klient nie jest połączony! Status:', this.client.readyState());
-                // Spróbuj ponownie połączyć
-                await this.client.connect();
+            // Sprawdź duplikaty
+            const currentTime = Date.now();
+            if (relayMessage === this.lastSentMessage && 
+                currentTime - this.lastSentTime < 10000) {
                 return;
             }
 
-            // Wyślij wiadomość na kanał docelowy z dodatkowym debugowaniem
-            if (relayMessage === this.lastSentMessage &&
-                currentTime - this.lastSentTime < 10000) { // 10s
-                return;
-            }
             this.lastSentMessage = relayMessage;
             this.lastSentTime = currentTime;
-            const result = await this.client.say(`#${this.config.targetChannel}`, relayMessage);
-            const result2 = await this.client.say(`#${this.config.targetChannel2}`, relayMessage);
-            console.log('🔍 Debug - rezultat say():', result);
 
+            // Wyślij równolegle na oba kanały
+            const promises = [
+                this.client.say(`#${this.config.targetChannel}`, relayMessage),
+                this.client.say(`#${this.config.targetChannel2}`, relayMessage)
+            ];
+
+            await Promise.all(promises);
+            
+            this.messageCount++;
             this.lastMessageTime = Date.now();
 
             console.log(`📤 Przekazano wiadomość:`);
             console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser || 'system'})`);
-            console.log(`   📍 Do: #${this.config.targetChannel}`);
-            console.log(`   📍 Do: #${this.config.targetChannel2}`);
+            console.log(`   📍 Do: #${this.config.targetChannel}, #${this.config.targetChannel2}`);
             console.log(`   💬 Treść: ${originalMessage}`);
 
         } catch (error) {
-            console.error('❌ Błąd podczas przekazywania wiadomości:', error);
-
-            // Bardziej szczegółowe logowanie błędów
-            if (error instanceof Error) {
-                console.error('❌ Szczegóły błędu:', {
-                    message: error.message,
-                    stack: error.stack,
-                    name: error.name
-                });
-            }
-
-            // Jeśli błąd związany z połączeniem, spróbuj ponownie po chwili
-            if (error instanceof Error && (
-                error.message.includes('Not connected') ||
-                error.message.includes('Connection closed') ||
-                error.message.includes('ECONNRESET')
-            )) {
-                console.log('🔄 Próba ponownego połączenia i wysłania...');
-                setTimeout(async () => {
-                    try {
-                        await this.client.connect();
-                        await this.relayMessage(originalMessage, originalUser);
-                    } catch (retryError) {
-                        console.error('❌ Błąd przy ponownej próbie:', retryError);
-                    }
-                }, 3000);
+            console.error('❌ Błąd podczas wysyłania wiadomości:', error);
+            
+            // Dodaj z powrotem do kolejki przy błędzie
+            this.messageQueue.unshift({ message: originalMessage, user: originalUser });
+            
+            if (!this.isReconnecting) {
+                setTimeout(() => this.reconnectClient(), 1000);
             }
         }
-        this.messageCount++;
     }
 
-    private handleReconnect(): void {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error(`❌ Przekroczono maksymalną liczbę prób połączenia (${this.maxReconnectAttempts})`);
-            process.exit(1);
-        }
-
-        this.reconnectAttempts++;
-        console.log(`🔄 Próba ponownego połączenia ${this.reconnectAttempts}/${this.maxReconnectAttempts} za ${this.reconnectDelay / 1000}s...`);
-
-        setTimeout(async () => {
-            try {
-                await this.client.connect();
-            } catch (error) {
-                console.error('❌ Błąd podczas ponownego połączenia:', error);
-                this.handleReconnect();
-            }
-        }, this.reconnectDelay);
-
-        // Zwiększ opóźnienie dla kolejnych prób (exponential backoff)
-        this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 60000);
+    private async relayMessage(originalMessage: string, originalUser: string): Promise<void> {
+        this.queueMessage(originalMessage, originalUser);
     }
 
     private sleep(ms: number): Promise<void> {
@@ -440,11 +438,9 @@ class TwitchRelayBot {
         try {
             console.log('🚀 Uruchamianie Twitch Relay Bot...');
 
-            // Jeśli nie mamy tokenu, ale mamy OAuth helper, wygeneruj token
             if (!this.config.oauthToken && this.oauthHelper) {
                 console.log('🔐 Brak tokenu OAuth - rozpoczynam proces autoryzacji...');
 
-                // Sprawdź czy mamy zapisany token
                 const existingToken = await this.oauthHelper.getValidToken();
                 if (existingToken) {
                     console.log('✅ Znaleziono zapisany token OAuth');
@@ -454,13 +450,11 @@ class TwitchRelayBot {
                     this.config.oauthToken = await this.oauthHelper.performOAuthFlow();
                 }
 
-                // Zweryfikuj token
                 const isValid = await this.oauthHelper.validateToken(this.config.oauthToken);
                 if (!isValid) {
                     throw new Error('Wygenerowany token OAuth jest nieprawidłowy');
                 }
 
-                // Odtwórz klienta z nowym tokenem
                 this.client = this.createClient();
                 this.setupEventHandlers();
             }
@@ -473,6 +467,7 @@ class TwitchRelayBot {
 
             await this.client.connect();
             this.setupTokenValidation();
+            this.setupHealthCheck();
             this.testWordFilter();
         } catch (error) {
             console.error('❌ Błąd podczas uruchamiania bota:', error);
@@ -482,6 +477,18 @@ class TwitchRelayBot {
 
     public async stop(): Promise<void> {
         console.log('🛑 Zatrzymywanie bota...');
+        
+        // Wyczyść timery
+        if (this.tokenValidationTimer) {
+            clearInterval(this.tokenValidationTimer);
+        }
+        if (this.healthCheckTimer) {
+            clearInterval(this.healthCheckTimer);
+        }
+        if (this.minuteTimer) {
+            clearInterval(this.minuteTimer);
+        }
+
         try {
             await this.client.disconnect();
             console.log('✅ Bot zatrzymany');
@@ -502,7 +509,6 @@ process.on('SIGTERM', async () => {
     process.exit(0);
 });
 
-// Obsługa nieobsłużonych błędów
 process.on('uncaughtException', (error) => {
     console.error('🚨 Nieobsłużony błąd:', error);
     process.exit(1);
@@ -513,13 +519,11 @@ process.on('unhandledRejection', (reason, promise) => {
     process.exit(1);
 });
 
-// Uruchomienie aplikacji
 async function main() {
     const bot = new TwitchRelayBot();
     await bot.start();
 }
 
-// Uruchom tylko jeśli plik jest wykonywany bezpośrednio
 if (require.main === module) {
     main().catch(error => {
         console.error('❌ Krytyczny błąd aplikacji:', error);
