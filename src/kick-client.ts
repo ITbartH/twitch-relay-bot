@@ -3,7 +3,7 @@ import https from 'https';
 export interface KickChatMessage {
   broadcaster_user_id?: number;
   content: string;
-  reply_to_message_id?: string;
+  reply_to_message_id?: string | null;
   type: 'user' | 'bot';
 }
 
@@ -20,10 +20,17 @@ export class KickClient {
     try {
       if (!this.channelId) throw new Error('Channel ID not set.');
 
+      const message: KickChatMessage = {
+        broadcaster_user_id: this.channelId,
+        content,
+        reply_to_message_id: null,
+        type: 'user',
+      };
+
       const response = await this.makeRequest(
         'POST',
-        `/api/v2/channels/${this.channelId}/messages`,
-        { message: content }
+        '/public/v1/chat',
+        message
       );
 
       const data = JSON.parse(response);
@@ -42,7 +49,7 @@ export class KickClient {
         hostname: 'api.kick.com',
         port: 443,
         path: endpoint,
-        method: method,
+        method,
         headers: {
           'Authorization': `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json',
