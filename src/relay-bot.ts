@@ -1,6 +1,8 @@
 import tmi from 'tmi.js';
 import dotenv from 'dotenv';
 import { TwitchOAuthHelper } from './oauth-helper.js';
+import { KickOAuthHelper } from './kick-oauth-helper.js';
+import { KickClient } from './kick-client.js';
 import { WordFilter } from './word-filter.js';
 
 // Załaduj zmienne środowiskowe
@@ -14,12 +16,17 @@ interface BotConfig {
     targetChannel2: string;
     clientId?: string;
     clientSecret?: string;
+    kickClientId?: string;
+    kickClientSecret?: string;
+    kickChannelId?: number;
 }
 
 class TwitchRelayBot {
     private client: tmi.Client;
     private config: BotConfig;
     private oauthHelper?: TwitchOAuthHelper;
+    private kickOAuthHelper?: KickOAuthHelper;
+    private kickClient?: KickClient;
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 10;
     private reconnectDelay = 5000;
@@ -41,7 +48,7 @@ class TwitchRelayBot {
 
     private tokenValidationTimer?: NodeJS.Timeout;
     private healthCheckTimer?: NodeJS.Timeout;
-    private messageQueue: Array<{message: string, user: string}> = [];
+    private messageQueue: Array<{ message: string, user: string }> = [];
     private isProcessingQueue = false;
 
     private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'normal' = 'normal'): {
@@ -115,6 +122,14 @@ class TwitchRelayBot {
             );
         }
 
+        if (this.config.kickClientId && this.config.kickClientSecret) {
+            this.kickOAuthHelper = new KickOAuthHelper(
+                this.config.kickClientId,
+                this.config.kickClientSecret,
+                'http://localhost:3001/kick-callback'
+            );
+        }
+
         this.client = this.createClient();
         this.setupEventHandlers();
     }
@@ -129,6 +144,7 @@ class TwitchRelayBot {
         }
 
         const hasClientCredentials = !!(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET);
+        const hasKickCredentials = !!(process.env.KICK_CLIENT_ID && process.env.KICK_CLIENT_SECRET);
 
         if (!hasClientCredentials) {
             throw new Error('Wymagane są TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET');
@@ -141,7 +157,10 @@ class TwitchRelayBot {
             targetChannel: process.env.TARGET_CHANNEL!,
             targetChannel2: process.env.TARGET_CHANNEL2!,
             clientId: process.env.TWITCH_CLIENT_ID,
-            clientSecret: process.env.TWITCH_CLIENT_SECRET
+            clientSecret: process.env.TWITCH_CLIENT_SECRET,
+            kickClientId: process.env.KICK_CLIENT_ID,
+            kickClientSecret: process.env.KICK_CLIENT_SECRET,
+            kickChannelId: process.env.KICK_CHANNEL_ID ? parseInt(process.env.KICK_CHANNEL_ID) : undefined
         };
     }
 
@@ -164,6 +183,20 @@ class TwitchRelayBot {
             },
             channels: [this.config.sourceChannel, this.config.targetChannel, this.config.targetChannel2]
         });
+    }
+
+    private async initializeKickClient(): Promise<void> {
+        if (!this.kickOAuthHelper) return;
+
+        try {
+            const kickToken = await this.kickOAuthHelper.getValidToken();
+            if (kickToken) {
+                this.kickClient = new KickClient(kickToken, this.config.kickChannelId);
+                console.log('✅ Kick client zainicjalizowany');
+            }
+        } catch (error) {
+            console.error('❌ Błąd inicjalizacji Kick client:', error);
+        }
     }
 
     private rememberMessage(user: string, msg: string) {
@@ -189,14 +222,14 @@ class TwitchRelayBot {
 
     private async reconnectClient(): Promise<void> {
         if (this.isReconnecting) return;
-        
+
         this.isReconnecting = true;
         console.log('🔄 Rozpoczynam reconnect...');
 
         try {
             // Wyczyść stary klient
             if (this.client) {
-                await this.client.disconnect().catch(() => {});
+                await this.client.disconnect().catch(() => { });
             }
 
             // Odśwież token jeśli możliwe
@@ -207,30 +240,33 @@ class TwitchRelayBot {
                 }
             }
 
+            // Odśwież Kick token i client
+            await this.initializeKickClient();
+
             // Utwórz nowego klienta
             this.client = this.createClient();
             this.setupEventHandlers();
-            
+
             // Połącz
             await this.client.connect();
             console.log('✅ Reconnect zakończony sukcesem');
-            
+
             this.reconnectAttempts = 0;
             this.reconnectDelay = 5000;
-            
+
         } catch (error) {
             console.error('❌ Błąd podczas reconnect:', error);
             this.reconnectAttempts++;
-            
+
             if (this.reconnectAttempts >= this.maxReconnectAttempts) {
                 console.error('❌ Przekroczono limit prób reconnect');
                 process.exit(1);
             }
-            
+
             // Exponential backoff
             this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 60000);
             console.log(`⏳ Kolejna próba za ${this.reconnectDelay / 1000}s...`);
-            
+
             setTimeout(() => {
                 this.reconnectClient();
             }, this.reconnectDelay);
@@ -241,10 +277,11 @@ class TwitchRelayBot {
 
     private setupTokenValidation(): void {
         this.tokenValidationTimer = setInterval(async () => {
+            // Walidacja Twitch token
             if (this.oauthHelper && this.config.oauthToken) {
                 const isValid = await this.oauthHelper.validateToken(this.config.oauthToken);
                 if (!isValid) {
-                    console.log('🔄 Token wygasł - odświeżanie...');
+                    console.log('🔄 Twitch token wygasł - odświeżanie...');
                     try {
                         const newToken = await this.oauthHelper.getValidToken();
                         if (newToken) {
@@ -252,8 +289,16 @@ class TwitchRelayBot {
                             await this.reconnectClient();
                         }
                     } catch (error) {
-                        console.error('❌ Błąd odświeżania tokenu:', error);
+                        console.error('❌ Błąd odświeżania Twitch tokenu:', error);
                     }
+                }
+            }
+
+            // Walidacja Kick token
+            if (this.kickOAuthHelper && this.kickClient) {
+                const kickToken = await this.kickOAuthHelper.getValidToken();
+                if (kickToken) {
+                    this.kickClient = new KickClient(kickToken, this.config.kickChannelId);
                 }
             }
         }, 50 * 60 * 1000);
@@ -264,6 +309,9 @@ class TwitchRelayBot {
             console.log(`✅ Bot połączony z ${addr}:${port}`);
             console.log(`📺 Monitoruję kanał: #${this.config.sourceChannel}`);
             console.log(`🎯 Przekazuję do kanałów: #${this.config.targetChannel}, ${this.config.targetChannel2}`);
+            if (this.kickClient) {
+                console.log(`🦵 Kick client aktywny`);
+            }
             this.reconnectAttempts = 0;
         });
 
@@ -276,7 +324,7 @@ class TwitchRelayBot {
 
         this.client.on('error' as any, async (err: Error) => {
             console.error('🚨 Błąd połączenia:', err.message);
-            
+
             if (!this.isReconnecting) {
                 setTimeout(() => this.reconnectClient(), 1000);
             }
@@ -350,7 +398,7 @@ class TwitchRelayBot {
 
     private async processQueue(): Promise<void> {
         if (this.isProcessingQueue || this.messageQueue.length === 0) return;
-        
+
         this.isProcessingQueue = true;
 
         while (this.messageQueue.length > 0) {
@@ -384,13 +432,13 @@ class TwitchRelayBot {
                 }, 60000);
             }
 
-            const relayMessage = originalUser ? 
-                `${originalUser}: ${originalMessage}` : 
+            const relayMessage = originalUser ?
+                `${originalUser}: ${originalMessage}` :
                 originalMessage;
 
             // Sprawdź duplikaty
             const currentTime = Date.now();
-            if (relayMessage === this.lastSentMessage && 
+            if (relayMessage === this.lastSentMessage &&
                 currentTime - this.lastSentTime < 10000) {
                 return;
             }
@@ -398,28 +446,37 @@ class TwitchRelayBot {
             this.lastSentMessage = relayMessage;
             this.lastSentTime = currentTime;
 
-            // Wyślij równolegle na oba kanały
+            // Wyślij równolegle na oba kanały Twitch i Kick
             const promises = [
                 this.client.say(`#${this.config.targetChannel}`, relayMessage),
                 this.client.say(`#${this.config.targetChannel2}`, relayMessage)
             ];
 
+            // Dodaj Kick jeśli dostępny
+
             await Promise.all(promises);
-            
+
+            if (this.kickClient) {
+                const success = await this.kickClient.sendMessage(relayMessage);
+                if (!success) {
+                    console.log('❌ Błąd wysyłania na Kick');
+                }
+            }
+
             this.messageCount++;
             this.lastMessageTime = Date.now();
 
             console.log(`📤 Przekazano wiadomość:`);
             console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser || 'system'})`);
-            console.log(`   📍 Do: #${this.config.targetChannel}, #${this.config.targetChannel2}`);
+            console.log(`   📍 Do: #${this.config.targetChannel}, #${this.config.targetChannel2}${this.kickClient ? ', Kick' : ''}`);
             console.log(`   💬 Treść: ${originalMessage}`);
 
         } catch (error) {
             console.error('❌ Błąd podczas wysyłania wiadomości:', error);
-            
+
             // Dodaj z powrotem do kolejki przy błędzie
             this.messageQueue.unshift({ message: originalMessage, user: originalUser });
-            
+
             if (!this.isReconnecting) {
                 setTimeout(() => this.reconnectClient(), 1000);
             }
@@ -459,11 +516,28 @@ class TwitchRelayBot {
                 this.setupEventHandlers();
             }
 
+            // Inicjalizuj Kick jeśli skonfigurowany
+            if (this.kickOAuthHelper) {
+                console.log('🦵 Inicjalizacja Kick OAuth...');
+                let kickToken = await this.kickOAuthHelper.getValidToken();
+
+                if (!kickToken) {
+                    console.log('🔑 Wymagana autoryzacja Kick OAuth');
+                    kickToken = await this.kickOAuthHelper.performOAuthFlow();
+                }
+
+                this.kickClient = new KickClient(kickToken, this.config.kickChannelId);
+                console.log('✅ Kick client gotowy');
+            }
+
             console.log(`📋 Konfiguracja:`);
             console.log(`   🤖 Bot: ${this.config.botUsername}`);
             console.log(`   📺 Źródło: #${this.config.sourceChannel}`);
             console.log(`   🎯 Cel: #${this.config.targetChannel}`);
             console.log(`   🎯 Cel: #${this.config.targetChannel2}`);
+            if (this.kickClient) {
+                console.log(`   🦵 Kick: aktywny`);
+            }
 
             await this.client.connect();
             this.setupTokenValidation();
@@ -477,7 +551,7 @@ class TwitchRelayBot {
 
     public async stop(): Promise<void> {
         console.log('🛑 Zatrzymywanie bota...');
-        
+
         // Wyczyść timery
         if (this.tokenValidationTimer) {
             clearInterval(this.tokenValidationTimer);
