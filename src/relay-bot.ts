@@ -199,6 +199,22 @@ class TwitchRelayBot {
         }
     }
 
+    private async getKickChannelName(channelId: string): Promise<string> {
+        const res = await fetch(`https://kick.com/api/v1/channels/${channelId}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP error: ${res.status}`);
+        }
+
+        const data = await res.json();
+        return data.slug; // ← nazwa kanału
+    }
+
     private rememberMessage(user: string, msg: string) {
         const nick = user.toLowerCase();
 
@@ -311,6 +327,7 @@ class TwitchRelayBot {
             console.log(`🎯 Przekazuję do kanałów: #${this.config.targetChannel}, ${this.config.targetChannel2}`);
             if (this.kickClient) {
                 console.log(`🦵 Kick client aktywny`);
+                console.log(`🦵 Przekazuję do kanału KICK: #${this.getKickChannelName(this.config.kickChannelId.toString())}`);
             }
             this.reconnectAttempts = 0;
         });
