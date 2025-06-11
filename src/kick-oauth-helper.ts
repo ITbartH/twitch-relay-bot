@@ -146,8 +146,8 @@ export class KickOAuthHelper {
         res.end('Not Found');
       });
 
-      server.listen(3001, () => {
-        console.log('🌐 Kick callback serwer uruchomiony na porcie 3001');
+      server.listen(3000, () => {
+        console.log('🌐 Kick callback serwer uruchomiony na porcie 3000');
       });
 
       server.on('error', (err) => {
