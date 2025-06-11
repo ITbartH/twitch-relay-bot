@@ -35,8 +35,8 @@ export class KickClient {
 
       const data = JSON.parse(response);
       return data?.id !== undefined;
-    } catch (error) {
-      console.error('❌ Błąd wysyłania wiadomości Kick:', error);
+    } catch (error: any) {
+      console.error('❌ Błąd wysyłania wiadomości Kick:', error?.message || error);
       return false;
     }
   }
@@ -68,20 +68,20 @@ export class KickClient {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve(responseData);
           } else {
+            console.error(`❌ HTTP ${res.statusCode}: ${responseData}`);
             reject(new Error(`HTTP ${res.statusCode}: ${responseData}`));
           }
         });
+
+        req.on('error', (error) => {
+          reject(error);
+        });
+
+        if (postData) {
+          req.write(postData);
+        }
+
+        req.end();
       });
-
-      req.on('error', (error) => {
-        reject(error);
-      });
-
-      if (postData) {
-        req.write(postData);
-      }
-
-      req.end();
-    });
-  }
+    }
 }
