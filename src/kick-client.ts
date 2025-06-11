@@ -18,19 +18,16 @@ export class KickClient {
 
   public async sendMessage(content: string): Promise<boolean> {
     try {
-      const messageData: KickChatMessage = {
-        content: content,
-        type: 'bot'
-      };
+      if (!this.channelId) throw new Error('Channel ID not set.');
 
-      if (this.channelId) {
-        messageData.broadcaster_user_id = this.channelId;
-      }
+      const response = await this.makeRequest(
+        'POST',
+        `/api/v2/channels/${this.channelId}/messages`,
+        { message: content }
+      );
 
-      const response = await this.makeRequest('POST', '/public/v1/chat', messageData);
       const data = JSON.parse(response);
-      
-      return data.data?.is_sent === true;
+      return data?.id !== undefined;
     } catch (error) {
       console.error('❌ Błąd wysyłania wiadomości Kick:', error);
       return false;
@@ -40,7 +37,7 @@ export class KickClient {
   private makeRequest(method: string, endpoint: string, data?: any): Promise<string> {
     return new Promise((resolve, reject) => {
       const postData = data ? JSON.stringify(data) : undefined;
-      
+
       const options = {
         hostname: 'api.kick.com',
         port: 443,
@@ -55,11 +52,11 @@ export class KickClient {
 
       const req = https.request(options, (res) => {
         let responseData = '';
-        
+
         res.on('data', (chunk) => {
           responseData += chunk;
         });
-        
+
         res.on('end', () => {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve(responseData);
@@ -76,7 +73,7 @@ export class KickClient {
       if (postData) {
         req.write(postData);
       }
-      
+
       req.end();
     });
   }
