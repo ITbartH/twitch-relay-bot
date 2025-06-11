@@ -34,8 +34,8 @@ export class KickClient {
       );
 
       const data = JSON.parse(response);
-      if (!data?.id) {
-        console.error('❌ Kick API response missing ID:', data);
+      if (!data?.data?.message_id) {
+        console.error('❌ Kick API response missing message_id:', data);
         return false;
       }
 
