@@ -57,6 +57,7 @@ export class KickOAuthHelper {
   public async exchangeCodeForToken(code: string): Promise<string> {
     const tokenData = await this.requestAccessToken(code);
     await this.saveToken(tokenData);
+    console.log("Twój KICK access token:" + tokenData.access_token)
     return tokenData.access_token;
   }
 
@@ -292,4 +293,6 @@ export class KickOAuthHelper {
       req.end();
     });
   }
+
+  
 }

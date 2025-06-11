@@ -34,7 +34,12 @@ export class KickClient {
       );
 
       const data = JSON.parse(response);
-      return data?.id !== undefined;
+      if (!data?.id) {
+        console.error('❌ Kick API response missing ID:', data);
+        return false;
+      }
+
+      return true;
     } catch (error: any) {
       console.error('❌ Błąd wysyłania wiadomości Kick:', error?.message || error);
       return false;
@@ -68,7 +73,7 @@ export class KickClient {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve(responseData);
           } else {
-            console.error(`❌ HTTP ${res.statusCode}: ${responseData}`);
+            console.error(`❌ Błąd HTTP ${res.statusCode}:`, responseData); // ← dokładny log z API
             reject(new Error(`HTTP ${res.statusCode}: ${responseData}`));
           }
         });
