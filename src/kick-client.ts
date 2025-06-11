@@ -72,16 +72,17 @@ export class KickClient {
             reject(new Error(`HTTP ${res.statusCode}: ${responseData}`));
           }
         });
-
-        req.on('error', (error) => {
-          reject(error);
-        });
-
-        if (postData) {
-          req.write(postData);
-        }
-
-        req.end();
       });
-    }
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+
+      if (postData) {
+        req.write(postData);
+      }
+
+      req.end();
+    });
+  }
 }
