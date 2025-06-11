@@ -51,7 +51,7 @@ class TwitchRelayBot {
     private messageQueue: Array<{ message: string, user: string }> = [];
     private isProcessingQueue = false;
 
-    private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'normal' = 'normal'): {
+    private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'timeout' |'normal' = 'normal'): {
         shouldSend: boolean;
         processedMessage: string;
         wasFiltered: boolean;
@@ -199,7 +199,7 @@ class TwitchRelayBot {
         }
     }
 
-    
+
 
     private rememberMessage(user: string, msg: string) {
         const nick = user.toLowerCase();
@@ -351,6 +351,29 @@ class TwitchRelayBot {
             }
 
             console.log('[BAN detected] ->', relay);
+            this.queueMessage(relay, '');
+            this.lastMessages.delete(username.toLowerCase());
+        });
+
+        this.client.on('timeout', async (channel, username, reason, duration, userstate) => {
+            const cleanChannelName = channel.replace(/^#/, '').toLowerCase();
+            if (cleanChannelName !== this.config.sourceChannel.toLowerCase()) return;
+
+            const cleanChannel = channel.replace(/^#/, '').replace(/^./, c => c.toUpperCase());
+            const lastMsg = this.lastMessages.get(username.toLowerCase()) || 'brak danych';
+            const processedMsg = this.processMessageForRelay(lastMsg, 'timeout');
+
+            let relay: string;
+            if (!processedMsg.shouldSend) {
+                relay = ` ${cleanChannel} czasowo zablokował @${username} na (${duration}s). 60 `
+                    + ` Ostatnie słowa: [wiadomość usunięta - nieodpowiednia treść]. JasperSalute`;
+            } else {
+                const msgSuffix = processedMsg.wasFiltered ? ' [ocenzurowano]' : '';
+                relay = ` ${cleanChannel} czasowo zablokował @${username} na (${duration}s). 60 `
+                    + ` Ostatnie słowa: "${processedMsg.processedMessage}"${msgSuffix}. JasperSalute`;
+            }
+
+            console.log('[TIMEOUT detected] ->', relay);
             this.queueMessage(relay, '');
             this.lastMessages.delete(username.toLowerCase());
         });
