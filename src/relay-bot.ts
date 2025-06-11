@@ -126,7 +126,7 @@ class TwitchRelayBot {
             this.kickOAuthHelper = new KickOAuthHelper(
                 this.config.kickClientId,
                 this.config.kickClientSecret,
-                'http://localhost:3001/kick-callback'
+                'https://twitch-relay-bot-production.up.railway.app/kick-callback'
             );
         }
 
