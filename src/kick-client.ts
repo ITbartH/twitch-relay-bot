@@ -45,7 +45,9 @@ export class KickClient {
       return false;
     }
   }
-
+  public getAccessToken(): string {
+    return this.accessToken;
+  }
   private makeRequest(method: string, endpoint: string, data?: any): Promise<string> {
     return new Promise((resolve, reject) => {
       const postData = data ? JSON.stringify(data) : undefined;

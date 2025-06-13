@@ -291,11 +291,23 @@ class TwitchRelayBot {
                 }
             }
 
-            // Walidacja Kick token
-            if (this.kickOAuthHelper && this.kickClient) {
-                const kickToken = await this.kickOAuthHelper.getValidToken();
-                if (kickToken) {
-                    this.kickClient = new KickClient(kickToken, this.config.kickChannelId);
+            // Walidacja Kick token - POPRAWKA
+            if (this.kickOAuthHelper) {
+                try {
+                    const newKickToken = await this.kickOAuthHelper.getValidToken();
+                    if (newKickToken) {
+                        // Sprawdź czy token się zmienił
+                        if (!this.kickClient || this.kickClient.getAccessToken() !== newKickToken) {
+                            console.log('🔄 Kick token odświeżony - aktualizacja client...');
+                            this.kickClient = new KickClient(newKickToken, this.config.kickChannelId);
+                        }
+                    } else {
+                        // Jeśli nie ma tokenu, usuń client
+                        this.kickClient = undefined;
+                    }
+                } catch (error) {
+                    console.error('❌ Błąd odświeżania Kick tokenu:', error);
+                    this.kickClient = undefined;
                 }
             }
         }, 50 * 60 * 1000);
