@@ -12,8 +12,7 @@ interface BotConfig {
     botUsername: string;
     oauthToken: string;
     sourceChannel: string;
-    targetChannel: string;
-    targetChannel2: string;
+    targetChannels: string[]; // Zmiana z targetChannel/targetChannel2 na tablicę
     clientId?: string;
     clientSecret?: string;
     kickClientId?: string;
@@ -51,7 +50,7 @@ class TwitchRelayBot {
     private messageQueue: Array<{ message: string, user: string }> = [];
     private isProcessingQueue = false;
 
-    private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'timeout' |'normal' = 'normal'): {
+    private processMessageForRelay(message: string, context: 'delete' | 'ban' | 'timeout' | 'normal' = 'normal'): {
         shouldSend: boolean;
         processedMessage: string;
         wasFiltered: boolean;
@@ -102,16 +101,6 @@ class TwitchRelayBot {
         });
     }
 
-    private banPatterns = [
-        /has been (permanently )?banned/i,
-        /został (na stałe )?zbanowany/i,
-        /permanently banned/i,
-        /banned by/i,
-        /\.ban\s+\w+/i,
-        /7tv.*ban/i,
-        /banned \w+\.?/i
-    ];
-
     constructor() {
         this.config = this.loadConfig();
 
@@ -135,7 +124,7 @@ class TwitchRelayBot {
     }
 
     private loadConfig(): BotConfig {
-        const requiredEnvVars = ['TWITCH_BOT_USERNAME', 'SOURCE_CHANNEL', 'TARGET_CHANNEL'];
+        const requiredEnvVars = ['TWITCH_BOT_USERNAME', 'SOURCE_CHANNEL', 'TARGET_CHANNELS']; // Zmiana TARGET_CHANNEL na TARGET_CHANNELS
 
         for (const envVar of requiredEnvVars) {
             if (!process.env[envVar]) {
@@ -144,18 +133,22 @@ class TwitchRelayBot {
         }
 
         const hasClientCredentials = !!(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET);
-        const hasKickCredentials = !!(process.env.KICK_CLIENT_ID && process.env.KICK_CLIENT_SECRET);
 
         if (!hasClientCredentials) {
             throw new Error('Wymagane są TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET');
         }
 
+        // Parsuj kanały z przecinkami
+        const targetChannels = process.env.TARGET_CHANNELS!
+            .split(',')
+            .map(channel => channel.trim())
+            .filter(channel => channel.length > 0);
+
         return {
             botUsername: process.env.TWITCH_BOT_USERNAME!,
             oauthToken: '',
             sourceChannel: process.env.SOURCE_CHANNEL!,
-            targetChannel: process.env.TARGET_CHANNEL!,
-            targetChannel2: process.env.TARGET_CHANNEL2!,
+            targetChannels: targetChannels,
             clientId: process.env.TWITCH_CLIENT_ID,
             clientSecret: process.env.TWITCH_CLIENT_SECRET,
             kickClientId: process.env.KICK_CLIENT_ID,
@@ -165,23 +158,25 @@ class TwitchRelayBot {
     }
 
     private createClient(): tmi.Client {
+        const allChannels = [this.config.sourceChannel, ...this.config.targetChannels];
+
         return new tmi.Client({
             options: {
-                debug: false, // Wyłączone debug dla stabilności
-                messagesLogLevel: 'error' // Tylko błędy
+                debug: false,
+                messagesLogLevel: 'error'
             },
             connection: {
-                reconnect: false, // Wyłączone auto-reconnect, będziemy to robić manualnie
+                reconnect: false,
                 secure: true,
-                timeout: 30000, // Zmniejszone timeout
-                maxReconnectAttempts: 0, // Wyłączone auto-reconnect
+                timeout: 30000,
+                maxReconnectAttempts: 0,
                 maxReconnectInterval: 5000
             },
             identity: {
                 username: this.config.botUsername,
                 password: this.config.oauthToken
             },
-            channels: [this.config.sourceChannel, this.config.targetChannel, this.config.targetChannel2]
+            channels: allChannels
         });
     }
 
@@ -310,7 +305,7 @@ class TwitchRelayBot {
         this.client.on('connected', (addr, port) => {
             console.log(`✅ Bot połączony z ${addr}:${port}`);
             console.log(`📺 Monitoruję kanał: #${this.config.sourceChannel}`);
-            console.log(`🎯 Przekazuję do kanałów: #${this.config.targetChannel}, ${this.config.targetChannel2}`);
+            console.log(`🎯 Przekazuję do kanałów: ${this.config.targetChannels.map(ch => `#${ch}`).join(', ')}`);
             if (this.kickClient) {
                 console.log(`🦵 Kick client aktywny`);
             }
@@ -461,7 +456,6 @@ class TwitchRelayBot {
                 `${originalUser}: ${originalMessage}` :
                 originalMessage;
 
-            // Sprawdź duplikaty
             const currentTime = Date.now();
             if (relayMessage === this.lastSentMessage &&
                 currentTime - this.lastSentTime < 10000) {
@@ -471,13 +465,10 @@ class TwitchRelayBot {
             this.lastSentMessage = relayMessage;
             this.lastSentTime = currentTime;
 
-            // Wyślij równolegle na oba kanały Twitch i Kick
-            const promises = [
-                this.client.say(`#${this.config.targetChannel}`, relayMessage),
-                this.client.say(`#${this.config.targetChannel2}`, relayMessage)
-            ];
-
-            // Dodaj Kick jeśli dostępny
+            // Wyślij na wszystkie kanały docelowe
+            const promises = this.config.targetChannels.map(channel =>
+                this.client.say(`#${channel}`, relayMessage)
+            );
 
             await Promise.all(promises);
 
@@ -493,13 +484,11 @@ class TwitchRelayBot {
 
             console.log(`📤 Przekazano wiadomość:`);
             console.log(`   📍 Z: #${this.config.sourceChannel} (${originalUser || 'system'})`);
-            console.log(`   📍 Do: #${this.config.targetChannel}, #${this.config.targetChannel2}${this.kickClient ? ', Kick' : ''}`);
+            console.log(`   📍 Do: ${this.config.targetChannels.map(ch => `#${ch}`).join(', ')}${this.kickClient ? ', Kick' : ''}`);
             console.log(`   💬 Treść: ${originalMessage}`);
 
         } catch (error) {
             console.error('❌ Błąd podczas wysyłania wiadomości:', error);
-
-            // Dodaj z powrotem do kolejki przy błędzie
             this.messageQueue.unshift({ message: originalMessage, user: originalUser });
 
             if (!this.isReconnecting) {
@@ -558,8 +547,7 @@ class TwitchRelayBot {
             console.log(`📋 Konfiguracja:`);
             console.log(`   🤖 Bot: ${this.config.botUsername}`);
             console.log(`   📺 Źródło: #${this.config.sourceChannel}`);
-            console.log(`   🎯 Cel: #${this.config.targetChannel}`);
-            console.log(`   🎯 Cel: #${this.config.targetChannel2}`);
+            console.log(`   🎯 Cele: ${this.config.targetChannels.map(ch => `#${ch}`).join(', ')}`);
             if (this.kickClient) {
                 console.log(`   🦵 Kick: aktywny`);
             }
