@@ -313,6 +313,23 @@ class TwitchRelayBot {
         }, 50 * 60 * 1000);
     }
 
+    private sanitizeForKick(message: string): string {
+        // Kick API blokuje wiadomości z polskimi znakami diakrytycznymi
+        // Zamień polskie znaki na odpowiedniki bez diakrytyki
+        const polishCharsMap: { [key: string]: string } = {
+            'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+            'Ą': 'A', 'Ć': 'C', 'Ę': 'E', 'Ł': 'L', 'Ń': 'N', 'Ó': 'O', 'Ś': 'S', 'Ź': 'Z', 'Ż': 'Z'
+        };
+
+        let sanitized = message;
+
+        // Zastąp polskie znaki
+        for (const [polish, latin] of Object.entries(polishCharsMap)) {
+            sanitized = sanitized.replace(new RegExp(polish, 'g'), latin);
+        }
+
+        return sanitized;
+    }
     private setupEventHandlers(): void {
         this.client.on('connected', (addr, port) => {
             console.log(`✅ Bot połączony z ${addr}:${port}`);
@@ -485,7 +502,8 @@ class TwitchRelayBot {
             await Promise.all(promises);
 
             if (this.kickClient) {
-                const success = await this.kickClient.sendMessage(relayMessage);
+                const sanitizedMessage = this.sanitizeForKick(relayMessage);
+                const success = await this.kickClient.sendMessage(sanitizedMessage);
                 if (!success) {
                     console.log('❌ Błąd wysyłania na Kick');
                 }
