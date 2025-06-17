@@ -259,7 +259,7 @@ class TwitchRelayBot {
                 process.exit(1);
             }
 
-            /
+            
             this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 60000);
             console.log(`⏳ Kolejna próba za ${this.reconnectDelay / 1000}s...`);
 
