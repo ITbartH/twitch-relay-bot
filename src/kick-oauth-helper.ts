@@ -218,7 +218,7 @@ export class KickOAuthHelper {
     const storage: KickTokenStorage = {
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
-      expires_at: Date.now() + (tokenData.expires_in * 1000) - 60000,
+      expires_at: Date.now() + (tokenData.expires_in * 1000) - 2100000,
       client_id: this.clientId,
       code_verifier: this.codeVerifier
     };
